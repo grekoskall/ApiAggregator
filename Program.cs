@@ -26,16 +26,30 @@ var newsApiSettings = new NewsApiSettings
     ApiBaseUrl = builder.Configuration["NewsAPI:ApiBaseUrl"] ?? "https://newsapi.org/v2"
 };
 
+var freeDictionarySettings = new FreeDictionaryApiSettings
+{
+    ApiBaseUrl = builder.Configuration["FreeDictionary:ApiBaseUrl"] ?? "https://api.dictionaryapi.dev/api/v2/entries/en"
+};
+
+var countriesSettings = new CountriesApiSettings
+{
+    ApiBaseUrl = builder.Configuration["Countries:ApiBaseUrl"] ?? "https://restcountries.com/v3.1"
+};
+
 builder.Services.AddHttpClient();
 
 builder.Services.AddSingleton(gitHubSettings);
 builder.Services.AddSingleton(openWeatherMapSettings);
 builder.Services.AddSingleton(newsApiSettings);
+builder.Services.AddSingleton(freeDictionarySettings);
+builder.Services.AddSingleton(countriesSettings);
 
 builder.Services.AddSingleton<IApiService, GitHubApiService>();
 builder.Services.AddSingleton<IApiService, OpenWeatherMapService>();
 builder.Services.AddSingleton<IApiService, NewsApiService>();
 builder.Services.AddSingleton<IApiService, SpotifyApiService>();
+builder.Services.AddSingleton<IApiService, CountriesApiService>();
+builder.Services.AddSingleton<IApiService, FreeDictionaryApiService>();
 
 builder.Services.AddSingleton<SpotifyAuthService>();
 
