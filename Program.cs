@@ -6,12 +6,16 @@ using AspNetCoreRateLimit;
 using Serilog;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Serilog
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
+    .WriteTo.File("logs/api-.log", rollingInterval: RollingInterval.Day)
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -31,6 +35,23 @@ builder.Services.AddSwaggerGen(c =>
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
     c.IncludeXmlComments(xmlPath);
 });
+
+// Add OpenTelemetry
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracerProvider =>
+        tracerProvider
+            .AddSource("ApiAggregation")
+            .SetResourceBuilder(ResourceBuilder.CreateDefault()
+                .AddService("ApiAggregation"))
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddConsoleExporter())
+    .WithMetrics(metricsProvider =>
+        metricsProvider
+            .AddMeter("ApiAggregation")
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddConsoleExporter());
 
 // Add API versioning
 builder.Services.AddApiVersioning(options =>
@@ -52,12 +73,16 @@ builder.Services.AddStackExchangeRedisCache(options =>
 {
     options.Configuration = builder.Configuration.GetValue<string>("Redis:ConnectionString");
 });
+
+// Add custom services
 builder.Services.AddSingleton<ICacheService, RedisCacheService>();
+builder.Services.AddSingleton<CircuitBreakerService>();
+builder.Services.AddSingleton<MetricsService>();
+builder.Services.AddSingleton<ApiThrottlingService>();
+builder.Services.AddHostedService<BackgroundJobService>();
 
-// Add Response Caching
+// Add Response Caching and Compression
 builder.Services.AddResponseCaching();
-
-// Add Response Compression
 builder.Services.AddResponseCompression(options =>
 {
     options.EnableForHttps = true;
