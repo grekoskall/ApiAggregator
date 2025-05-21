@@ -47,11 +47,30 @@ builder.Services.AddSingleton<IIpPolicyStore, MemoryCacheIpPolicyStore>();
 builder.Services.AddSingleton<IRateLimitCounterStore, MemoryCacheRateLimitCounterStore>();
 builder.Services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>();
 
+// Add Redis Cache
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration.GetValue<string>("Redis:ConnectionString");
+});
+builder.Services.AddSingleton<ICacheService, RedisCacheService>();
+
 // Add Response Caching
 builder.Services.AddResponseCaching();
 
+// Add Response Compression
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+});
+
 // Add Application Insights
 builder.Services.AddApplicationInsightsTelemetry();
+
+// Add Health Checks
+builder.Services.AddHealthChecks()
+    .AddRedis(builder.Configuration.GetValue<string>("Redis:ConnectionString")!)
+    .AddUrlGroup(new Uri(builder.Configuration["GitHub:ApiBaseUrl"]!), "GitHub API")
+    .AddUrlGroup(new Uri(builder.Configuration["OpenWeatherMap:ApiBaseUrl"]!), "OpenWeatherMap API");
 
 // Configure CORS
 builder.Services.AddCors(options =>
@@ -73,13 +92,52 @@ var gitHubSettings = new GitHubApiSettings
     UserAgent = builder.Configuration["GitHub:UserAgent"] ?? "ApiAggregation"
 };
 
-// ... (rest of the service configurations)
+var openWeatherMapSettings = new OpenWeatherMapSettings
+{
+    AccessToken = builder.Configuration["OpenWeatherMap:ApiKey"],
+    ApiBaseUrl = builder.Configuration["OpenWeatherMap:ApiBaseUrl"] ?? "https://api.openweathermap.org/data/2.5"
+};
+
+var newsApiSettings = new NewsApiSettings
+{
+    AccessToken = builder.Configuration["NewsAPI:ApiKey"],
+    ApiBaseUrl = builder.Configuration["NewsAPI:ApiBaseUrl"] ?? "https://newsapi.org/v2"
+};
+
+var freeDictionarySettings = new FreeDictionaryApiSettings
+{
+    ApiBaseUrl = builder.Configuration["FreeDictionary:ApiBaseUrl"] ?? "https://api.dictionaryapi.dev/api/v2/entries/en"
+};
+
+var countriesSettings = new CountriesApiSettings
+{
+    ApiBaseUrl = builder.Configuration["Countries:ApiBaseUrl"] ?? "https://restcountries.com/v3.1"
+};
+
+builder.Services.AddHttpClient();
+
+builder.Services.AddSingleton(gitHubSettings);
+builder.Services.AddSingleton(openWeatherMapSettings);
+builder.Services.AddSingleton(newsApiSettings);
+builder.Services.AddSingleton(freeDictionarySettings);
+builder.Services.AddSingleton(countriesSettings);
+
+builder.Services.AddSingleton<IApiService, GitHubApiService>();
+builder.Services.AddSingleton<IApiService, OpenWeatherMapService>();
+builder.Services.AddSingleton<IApiService, NewsApiService>();
+builder.Services.AddSingleton<IApiService, SpotifyApiService>();
+builder.Services.AddSingleton<IApiService, CountriesApiService>();
+builder.Services.AddSingleton<IApiService, FreeDictionaryApiService>();
+
+builder.Services.AddSingleton<SpotifyAuthService>();
+builder.Services.AddSingleton<IApiAggregationService, ApiAggregationService>();
 
 var app = builder.Build();
 
 // Configure middleware
 app.UseIpRateLimiting();
 app.UseResponseCaching();
+app.UseResponseCompression();
 app.UseSerilogRequestLogging();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
